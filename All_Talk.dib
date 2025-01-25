@@ -1,0 +1,499 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+
+#!markdown
+
+# Doing Math with F#
+F# is a fantastic language for doing mathematics. In this notebook you shall find examples shown in the talk Doing Math with F# in functional programming conference 2025
+
+This is based on my upcoming book on _Applied Mathematics usin F# from Springer_.
+
+In this presentation you shall find the following demos
+
+- *Input Output Economics (Leontief Model)*
+- *Symbolic Calculus* 
+- *Calculating Probability from Distributions*
+- *Symbolic Set Calculations and Conditional Sets* [ If time permits!]
+
+#!markdown
+
+## Getting the required binaries
+
+#!fsharp
+
+#r "nuget: MathNet.Numerics.FSharp, 5.0.0"
+#r "nuget: AngouriMath, 1.4.0-preview.3"
+#r "nuget:AngouriMath.Interactive,*-*"
+
+#!fsharp
+
+open MathNet.Numerics.LinearAlgebra
+
+#!markdown
+
+## Input Output Economics (Leontief Model)
+
+*Wassily Leontief* was born on 5 August 1906 in St. Petersburg, Russia and died on 5 February 1999 in New York, USA. This American economist was a witness to history. As a child, he witnessed Leo Tolstoy’s death and saw Lenin speaking to a crowd in front of the winter palace. Leontief has been called the father of input-output analysis in econometrics, which won him the Nobel Prize in economics in 1973 for “the development of the input-output method and its application to large economic models”.
+
+Wassily Leontief studied at the University of Leningrad, where he graduated in 1925 at the age of 19, and at the University of Berlin, where he graduated in 1928. In 1931 this young academic decided to leave Russia to escape censorship and moved to the United States of America to continue developing what has become his most important contribution to the world of economics, his famous input-output analysis. During this time, he taught at Harvard University until 1975, where he met Paul Anthony Samuelson. At the same time, he was director of the Harvard Economic Research Project on the American economy’s Structure (from 1948 to 1975). From 1975 until his death, he was a professor of economics at New York University, where he was appointed director of the Institute for Economic Analysis.
+
+#!markdown
+
+![Leontief](https://usercontent.one/wp/www.javierparra.net/wp-content/uploads/2020/04/Wassily-Leontief-won-the-Nobel-Prize-in-economics-for-his-input-output-method..png?media=1676887272)
+
+#!markdown
+
+### Equations 
+
+$X - AX = D$
+
+$X = (I - A)^{-1} \cdot D$
+
+#!markdown
+
+### Creating the identity matrix
+
+Note that the matrix is Sparse because it is only 33% filled
+
+#!fsharp
+
+// SparseMatrix : MathNet.Numerics.LinearAlgebra.SparseMatrix
+let I = SparseMatrix.identity<double> 3 
+printfn "Identity Matrix %A" I
+
+#!markdown
+
+### Coefficient Matrix A
+
+Let me break down this technical coefficients matrix (A) row by row and element by element:
+Row 1 [`0.15`, `0.25`, `0.05`] - Agriculture's inputs to other sectors:
+
+`0.15`: To produce `$1` worth of agricultural output, the agriculture sector needs `$0.15` worth of inputs from itself (e.g., seeds, feed)
+`0.25`: To produce `$1` worth of manufacturing output, the manufacturing sector needs `$0.25` worth of agricultural inputs (e.g., raw materials, food for workers)
+`0.05`: To produce `$1` worth of services output, the service sector needs `$0.05` worth of agricultural inputs (e.g., food for restaurants)
+
+Row 2 [`0.20`, `0.30`, `0.15`] - Manufacturing's inputs to other sectors:
+
+`0.20`: To produce `$1` worth of agricultural output, agriculture needs `$0.20` worth of manufactured inputs (e.g., machinery, fertilizers)
+`0.30`: To produce `$1` worth of manufacturing output, manufacturing needs `$0.30` worth of inputs from itself (e.g., parts, components)
+`0.15`: To produce `$1` worth of services output, services need `$0.15` worth of manufactured inputs (e.g., equipment, supplies)
+
+Row 3 [`0.10`, `0.15`, `0.20`] - Services' inputs to other sectors:
+
+`0.10`: To produce `$1` worth of agricultural output, agriculture needs `$0.10` worth of service inputs (e.g., insurance, banking)
+`0.15`: To produce `$1` worth of manufacturing output, manufacturing needs `$0.15` worth of service inputs (e.g., logistics, consulting)
+`0.20`: To produce `$1` worth of services output, services need `$0.20` worth of inputs from itself (e.g., business services, communications)
+
+Each column sums to less than `1` because the remaining portion represents value added (wages, profits, etc.). For example, in agriculture (first column):
+
+`0.15` (agriculture) + `0.20` (manufacturing) + `0.10` (services) = `0.45`
+This means `0.55` (or `55%`) of agricultural output value is value added
+
+This matrix shows the direct requirements - how much input is needed immediately from each sector to produce one unit of output. When we solve the full Leontief model `(I-A)⁻¹`, we get the total requirements, including both direct and indirect effects through the supply chain.
+
+#!fsharp
+
+let A = matrix [
+               // Agriculture inputs to: Agriculture, Manufacturing, Services
+               [0.15; 0.25; 0.05];  
+               // Manufacturing inputs to: Agriculture, Manufacturing, Services
+               [0.20; 0.30; 0.15];  
+               // Services inputs to: Agriculture, Manufacturing, Services
+               [0.10; 0.15; 0.20]   
+              ] 
+printfn "A = %A" A
+
+#!markdown
+
+### I - A 
+
+#!fsharp
+
+let sub = I - A
+printfn "%A" sub
+
+#!markdown
+
+### Demand 
+The following matrix represents the external demand (in billions of $) for each of these industries. 
+
+#!fsharp
+
+// Final Demand Matrix (in billions $)
+let D = matrix [
+    [50.];   // Agriculture demand
+    [120.];  // Manufacturing demand
+    [80.]    // Services demand
+]
+
+printfn "Demand is %A" D
+
+#!markdown
+
+### Solving for the total requirement
+
+#!fsharp
+
+let X = (I - A).Inverse() * D
+
+printfn "X = %A" X
+
+#!markdown
+
+### Creating the operator for inverse
+
+#!fsharp
+
+let (^) (matrix: Matrix<double>) (power: int) = 
+   match power with
+   | -1 -> matrix.Inverse()
+   | _ -> failwith "Only power of -1 supported for matrix inverse"
+
+#!markdown
+
+### Using a combination of operator and functions
+
+#!fsharp
+
+printfn "X = %A" (((I - A) ^ -1).Multiply(D))
+
+#!markdown
+
+## Symbolic Differentiation
+
+![description](https://www.thefamouspeople.com/profiles/images/isaac-newton-23.jpg)
+In this example, we shall use AngouriMath
+
+#!fsharp
+
+#r "nuget:AngouriMath.Interactive, *-*"
+
+#!fsharp
+
+open AngouriMath.FSharp.Core
+open AngouriMath.FSharp.Functions
+
+#!fsharp
+
+#r "nuget: MathNet.Numerics.FSharp, 5.0.0"
+#r "nuget: AngouriMath, 1.4.0-preview.3"
+#r "nuget:AngouriMath.Interactive,*-*"
+
+#!fsharp
+
+#r "nuget: Plotly.NET"
+
+#!fsharp
+
+#r "nuget: Plotly.NET.Interactive, 5.0.0"
+
+#!markdown
+
+### Objective
+
+We shall take equations in plain text format like `x^2+2x+3` for $x^2+2x+3$ and then using symbolic math capability of AngouriMath to produce the differentiation. And then we shall plot the results using Plotly.NET. In the demo, you can alter the equations.
+
+#!markdown
+
+## Symbolic Calculus
+
+#!fsharp
+
+open Plotly.NET
+
+#!markdown
+
+### Plot function and and its derivative and plotting
+
+#!fsharp
+
+open AngouriMath.FSharp.Functions
+
+let formula = "sin(x)*x^2"
+//let formula = "(x^4 - x^2 + 2)/(x^2-10x)"
+//let formula = "x^3"
+//let formula =  "x^3 + x^2-3x"//" //"sin(x)*x^2"  
+let eq = parsed formula//"3x^2 + 4x"
+let x = symbol "x"
+let simp = derivative x eq |> simplified
+let fprime = "f'(x) = " + simp.ToString()  
+let simp2 = derivative x simp |> simplified 
+let fprime2 = "f''(x) = " + simp2.ToString()  
+
+//printfn "%A" simp
+//let xs = [0. .. 1. .. 100.]
+let xs = [-1. .. 0.1 .. 1.]
+let formulaYs = xs |> List.map (fun z -> eq.Substitute("x", z).EvalNumerical().RealPart)
+                   |> List.map float 
+let ys = xs 
+         |> List.map (fun z -> simp.Substitute("x", z).EvalNumerical().RealPart)
+         |> List.map float 
+
+let y2s = xs 
+         |> List.map (fun z -> simp2.Substitute("x", z).EvalNumerical().RealPart)
+         |> List.map float  
+//printfn "%A" fprime 
+//printfn "%A" ys
+let fprimeChart = Chart.Spline
+                            (
+                                xs,
+                                formulaYs, 
+                                ShowMarkers=true,
+                                Name = "Function = " + formula, 
+                                Showlegend = true
+                            )
+let fprime2Chart = Chart.Spline
+                            (
+                                xs,
+                                y2s, 
+                                ShowMarkers=true,
+                                Name = fprime2, 
+                                Showlegend = true
+                            )
+let formulaChart = Chart.Spline
+                            (
+                                xs,
+                                ys, 
+                                ShowMarkers=true,
+                                Name = fprime, 
+                                Showlegend = true
+                            )
+let html  =  [formulaChart;fprimeChart;fprime2Chart]
+             |> Chart.Combine 
+             |> Chart.withSize(1000, 500)
+             |> GenericChart.toChartHTML 
+
+let writer = new StreamWriter(@"C:\Personal\temp.htm")
+writer.Write(html)
+writer.Close()
+
+printfn "Generated HTML!"
+
+#!markdown
+
+### Derivative function
+To calculate derivative we use `derivative` function 
+
+#!markdown
+
+### Function Composition in action
+To create a second derivative we can use derivative twice to create the composite function.
+
+#!fsharp
+
+// Creating operator for the first order derivative
+let (|*|) eq = derivative x eq
+// Creating operator for the second order derivative
+let (|**|) eq = derivative x (derivative x eq)
+
+#!fsharp
+
+let y = parsed "x^3 + 4x^2 + 7x"
+let x = symbol "x"
+let ``y'`` = (|*|) y|> simplified
+let ``y''`` = (|**|) y|> simplified
+printfn "y' = %A" ``y'``
+printfn "y'' = %A" ``y''``
+
+#!markdown
+
+### Double Derivative
+Here we are using a function composition to create a double derivative function to calculate $\frac{d^2y}{dx^2}$
+
+#!fsharp
+
+// We are also simplifying the result
+let dxd2 x = derivative x >> derivative x >> simplified
+
+#!fsharp
+
+let thisFormula = parsed "x^3-2x^2+4x"
+let r = dxd2 x thisFormula 
+printfn "Formula  = %A" thisFormula
+printfn "Second Derivative  = %A" r
+
+#!markdown
+
+# Calculating Probabilities from Distribution
+
+![birthweight](https://th.bing.com/th/id/OSK.HERO8S4XUq-XgQFExdZKcxZoR17uGHCGU-z-l-SsSGejWjY?rs=1&pid=ImgDetMain)
+
+#!markdown
+
+### Application of Normal Distribution
+The Medical records of infants delivered at Kaiser Memorial Hospital shows that the infants birth weights follow a normal distribution with mean of 7.4 and standard deviation of 1.2. Find the probability than an infant weights more than 9.2 pounds at birth
+
+#### Solution
+The solution is 
+
+$1.0 - \mathcal{N}(\mu=7.4, \sigma=1.2, x=9.2 )$
+
+#!csharp
+
+#r "nuget: MathNet.Numerics, 5.0.0"
+
+#!fsharp
+
+let mu = 7.4
+let sigma = 1.2
+let kmh = MathNet.Numerics.Distributions.Normal (mu, sigma)
+let prob = 100.*(1. - kmh.CumulativeDistribution(9.2))
+printfn "Probability is greater than 9.2 lbs is %A" prob
+
+#!fsharp
+
+open Plotly.NET
+open MathNet.Numerics.Distributions
+
+
+
+// Generate x values and calculate PDF values
+let xs = [ 0. .. 0.1 .. 12. ] // Range of x values
+let pdfValues = xs |> List.map kmh.Density // Calculate PDF values for x
+
+// Create the chart
+let chart = 
+    Chart.Spline(xs, pdfValues, Name = "Birth weight Distribution", ShowMarkers = true)
+    |> Chart.withTitle $"Normal Distribution Curve (Mean={mu}, StdDev={sigma})"
+    |> Chart.withX_AxisStyle("X", Showgrid = true)
+    |> Chart.withY_AxisStyle("Density", Showgrid = true)
+
+chart |> Chart.Show
+
+#!fsharp
+
+let x_cutoff = 9.2
+let pdfAtCutoff = kmh.Density(x_cutoff)
+
+// Create filled area trace
+let fillXs = xs |> List.filter (fun x -> x >= x_cutoff)
+let fillYs = fillXs |> List.map kmh.Density
+
+let chart = 
+   [
+       Chart.Spline(xs, pdfValues, Name = "Distribution")
+       Chart.Line([x_cutoff; x_cutoff], [0.; pdfAtCutoff], Name = "Cutoff", Showlegend = false)
+       Chart.Area(fillXs, fillYs, Name = "Area > 9.2", Opacity = 0.3)
+   ]
+   |> Chart.Combine
+   |> Chart.withTitle $"Normal Distribution (Mean={mu}, StdDev={sigma})"
+   |> Chart.withX_AxisStyle("X")
+   |> Chart.withY_AxisStyle("Density")
+
+chart |> Chart.Show 
+
+#!markdown
+
+# Symbolic Set Manipulation
+
+#!markdown
+
+Let's create a mini DSL for simple set evaluations
+
+We shall use the following math symbol for representing sets
+
+- `a < b` : To check if `a` is a subset of `b`
+- `a <= b` : To check if `a` is a proper subset of `b`
+- `a > b` : To check if `a` is a superset of `b`
+- `a >= b` : To check if `a` is a proper superset of `b`
+- `a & b` : To find the intersection of `a` and `b`
+- `a || b` : To find the union of `a` and `b`
+
+#!fsharp
+
+let (|<|) (x:Set<'a>) (y:Set<'a>) = Set.isSubset x y 
+
+let (|<=|) (x:Set<'a>) (y:Set<'a>) = Set.isProperSubset x y 
+
+let (|>|) (x:Set<'a>) (y:Set<'a>) = Set.isSuperset x y 
+
+let (|>=|) (x:Set<'a>) (y:Set<'a>) = Set.isProperSuperset x y 
+
+let (|||) (x:Set<'a>) (y:Set<'a>) = Set.union x y
+
+let (|&|) (x:Set<'a>) (y:Set<'a>) = Set.intersect x y
+
+#!markdown
+
+### Usages
+
+#!fsharp
+
+let set1 = Set [3;4;4;5;5;3;3;4]
+let set2 = Set [1;3;4;2;1;45;4;5]
+
+printfn "Set1 is proper subset of set2 : %A"  (set1 |<=| set2)
+printfn "Set2 is proper subset of set1 : %A"  (set2 |<=| set1)
+
+#!fsharp
+
+let set1 = Set [1; 2; 3; 4]
+//Notice, set2 is now a set of int again 
+let set2 = Set [3; 4; 4;5; 6]
+let set3 = Set [4;5;11;4;5]
+
+let intersection = (set1 |&| set2) |&| set3
+
+printfn "Common = %A" intersection
+
+printfn "Intersection of set1 and set2 = %A"
+            (Set.intersect set1 set2)
+printfn "Intersection of set1, set2 and set3 = %A" 
+               (Set.intersectMany [set1; set2; set3])
+
+#!fsharp
+
+let set1 = Set.ofList [1; 2; 3; 4]
+let set2 = Set.ofList [3; 4; 5; 6]
+let set3 = Set.ofList [4; 5; 11; 4; 5]
+//Calculates the union of the intersection between set1 and set2 and set3
+(set1 |&| set2) ||| set3 
+
+#!markdown
+
+#### Using with string values
+
+#!fsharp
+
+let s1 = Set.ofList  [ "A";"B";"C"]
+let s2 = Set.ofList  [ "fA";"B";"fC"]
+s1 |&| s2
+
+#!markdown
+
+#### Using the set DSL with user defined objects
+
+#!fsharp
+
+type Gender = Male | Female 
+type Student = { Name : string; Course : string; Gender : Gender}
+
+let jenny = {Name = "Jenny"; Course = "F#"; Gender = Female}
+let nancy = {Name = "Nancy"; Course = "C#"; Gender = Female}
+let sam = {Name = "Sam"; Course = "Python"; Gender = Male}
+
+let students1 = Set.ofList [jenny;sam;nancy]
+let students2 = Set.ofList [jenny;nancy]
+
+
+let commonStudents = students1 |&| students2
+printfn "Common Students = %A" commonStudents
+
+#!markdown
+
+## Conditional Sets
+
+#!markdown
+
+How will you represent all Integers? All booleans or all floating point or all complex numbers? 
+AngouriMath gives you a way to deal with these
+
+#!fsharp
+
+let I = AngouriMath.Entity.Set.SpecialSet.Create("Integers")
+let conSet = new AngouriMath.Entity.Set.ConditionalSet("x","121 >= x^2 >= 81")
+let combined = AngouriMath.Entity.Set.Intersectionf (I, conSet)
+
+printfn "10 is in combined set : %A" (combined.Contains(10))
+printfn "9.1 is in combined set : %A" (combined.Contains(9.1))
